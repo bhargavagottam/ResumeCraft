@@ -64,3 +64,43 @@ legend { color: #355c50; font-size: 13px; font-weight: 700; }
   .resume h2, .resume h3, .resume .metadata { break-after: avoid; }
   .resume p, .resume li { orphans: 2; widows: 2; }
 }
+
+/* Template gallery and shared document styles. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.gallery { max-width: 1280px; margin: auto; padding: 42px clamp(16px, 4vw, 56px); }
+.gallery-intro h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 52px); letter-spacing: -.055em; line-height: 1.06; }
+.gallery-intro p { margin: 0; max-width: 60ch; color: #415852; }
+.template-grid { border: 0; padding: 0; margin: 26px 0 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.template-card { position: relative; display: grid; align-content: start; gap: 12px; cursor: pointer; background: white; border: 2px solid #d5e1da; border-radius: 14px; padding: 12px; }
+.template-card:hover { border-color: #74a991; }
+.template-card:has(input:checked) { border-color: #23745d; box-shadow: 0 0 0 2px #23745d22; background: #f4fcf7; }
+.template-card:has(input:focus-visible) { outline: 3px solid #288a74; outline-offset: 3px; }
+.template-card input { position: absolute; top: 13px; right: 13px; z-index: 1; accent-color: #23745d; width: 18px; height: 18px; }
+.sample-paper { background: #e1ebe5; padding: 14px; border-radius: 8px; }
+.sample-paper .resume { min-height: 220px; padding: 12px; font-size: 6px; line-height: 1.28; }
+.sample-paper .resume h1 { font-size: 12px; }
+.sample-paper .resume h2, .sample-paper .resume h3 { font-size: 7px; }
+.sample-paper .resume-header { padding-bottom: 3px; }
+.sample-paper .resume-section { margin-top: 5px; }
+.sample-paper .resume-section h2 { margin-bottom: 2px; padding-bottom: 1px; }
+.sample-paper .resume p, .sample-paper .resume ul { margin: 1px 0; }
+.sample-paper .resume ul { padding-left: 10px; }
+.template-info { display: grid; gap: 5px; font-size: 13px; color: #415852; }
+.template-info strong { font-size: 17px; line-height: 1.15; color: #102e29; }
+.audience { color: #17634e; font-weight: 700; }
+.gallery-actions, .format-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0; }
+.template-sources { margin-top: 18px; font-size: 13px; color: #415852; }
+.template-sources summary { cursor: pointer; }
+.template-sources a, .section-links a { color: #165941; }
+.section-links { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 0 14px; font-size: 13px; }
+.format-classic { font-family: Georgia, 'Times New Roman', serif; }
+.format-classic .resume-header { text-align: center; }
+.format-graduate .resume-header { text-align: center; }
+.format-graduate .resume-section h2 { text-transform: uppercase; }
+.format-technical .resume-header { border-bottom-width: 2px; }
+.format-technical .resume-section h2 { border-bottom: 0; text-transform: uppercase; letter-spacing: .045em; }
+.format-leadership .resume-header { border-bottom: 2px solid #373737; }
+.format-leadership .resume-section h2 { font-family: Georgia, 'Times New Roman', serif; }
+@media (max-width: 950px) { .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 430px) { .template-grid { grid-template-columns: minmax(0, 1fr); } }
+@media print { .gallery { display: none; } }

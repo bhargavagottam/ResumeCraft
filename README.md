@@ -2,7 +2,7 @@
 
 ResumeCraft is a browser-based React resume builder. It uses a single-column layout, standard section headings, and selectable text for an ATS-friendly document.
 
-- Choose Fresher, Junior, Mid-level, Senior, or Staff / Principal. Presets change section order and writing prompts while preserving your draft.
+- Choose a template from the gallery: Classic Chronological, Graduate & Early Career, Technical Hybrid, or Leadership & Impact. Change templates without losing your draft.
 - Edit contact details, a summary, skills, work experience, projects, education, and certifications. Empty sections disappear from the preview.
 - Save a PDF using the browser print dialog. Choose **Save as PDF** as the destination and turn off browser headers and footers. Follow the employer's requested file format.
 - Drafts are stored in this browser when storage is available. Clear the draft using **Start over** on a shared device.
@@ -13,4 +13,4 @@ Serve the repository with `python -m http.server 8000` and open http://localhost
 
 ## GitHub Pages
 
-In **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/docs`, and save. The published site will be at https://bhargavagottam.github.io/ResumeCraft/.
+In **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/ (root)`, and save. The published site will be at https://bhargavagottam.github.io/ResumeCraft/.

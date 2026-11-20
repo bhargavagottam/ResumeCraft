@@ -9,12 +9,20 @@ if (!window.React || !window.ReactDOM) {
 function start() {
   const { createElement: h, useState, useEffect } = React;
   const storageKey = 'resume-craft:draft:v1';
-  const presets = {
-    Fresher: ['education skills projects experience certifications', 'Lead with your degree, relevant coursework, internships, or projects.'],
-    Junior: ['skills experience projects education certifications', 'Describe what you built, the tools you used, and the result.'],
-    'Mid-level': ['experience skills projects certifications education', 'Show the features or processes you owned and the outcomes you delivered.'],
-    Senior: ['experience skills projects certifications education', 'Highlight the decisions you led, who you worked with, and the outcomes.'],
-    'Staff / Principal': ['experience projects skills certifications education', 'Show cross-team impact, technical direction, and the scope of your decisions.'],
+  const templates = {
+    classic: { name: 'Classic Chronological', audience: 'Best all-purpose choice', description: 'Lead with your latest role and show your career progression.', order: 'experience skills education projects certifications', tip: 'Add your most recent role first. Use bullets to show results.' },
+    graduate: { name: 'Graduate & Early Career', audience: 'Students, freshers, and juniors', description: 'Put education, projects, and internships near the top.', order: 'education projects experience skills certifications', tip: 'Use projects, coursework, internships, or volunteer work to demonstrate your skills.' },
+    technical: { name: 'Technical Hybrid', audience: 'Technical roles and career changers', description: 'Show relevant skills and projects before your work history.', order: 'skills projects experience certifications education', tip: 'Group relevant skills by category. Use projects to show how you applied them.' },
+    leadership: { name: 'Leadership & Impact', audience: 'Senior, staff, and principal roles', description: 'Open with a summary and accomplishments that show scope and impact.', order: 'experience projects skills certifications education', tip: 'Describe the decisions you led, the teams involved, and the measurable outcomes.' },
+  };
+  const demo = {
+    contact: { name: 'Jordan Lee', headline: 'Software Engineer', email: 'jordan@example.com', phone: '555-0100', location: 'Boston, MA', linkedin: '', website: '' },
+    summary: 'Engineer with experience building accessible tools and improving delivery across teams.',
+    skills: 'Languages: JavaScript, Python, SQL\nTools: React, Git, PostgreSQL',
+    experience: [{ id: 'demo-role', title: 'Software Engineer', organization: 'Example Studio', dates: '2022 – Present', details: 'Reduced release time by 30% through automated checks.\nLed a cross-team dashboard rollout.' }],
+    projects: [{ id: 'demo-project', title: 'Service Health Dashboard', organization: 'React, Python', details: 'Built a dashboard to track response times and error rates.' }],
+    education: [{ id: 'demo-school', title: 'B.S. in Computer Science', organization: 'Example University', dates: '2022' }],
+    certifications: [],
   };
   const sections = {
     experience: { title: 'Work Experience', item: 'role', fields: [
@@ -41,7 +49,7 @@ function start() {
 
   function blankDraft() {
     return {
-      level: 'Fresher',
+      template: null,
       contact: Object.fromEntries(contactFields.map(([key]) => [key, ''])),
       summary: '', skills: '', experience: [], projects: [], education: [], certifications: [],
     };
@@ -50,7 +58,11 @@ function start() {
   function readDraft() {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
-      if (saved && Object.hasOwn(presets, saved.level)) return saved;
+      if (saved && typeof saved === 'object') {
+        const { template, ...content } = saved;
+        const validTemplate = Object.hasOwn(templates, template) ? template : null;
+        return { ...blankDraft(), ...content, template: validTemplate };
+      }
     } catch {
       // A blocked storage area or invalid JSON permits a fresh session.
     }
@@ -66,7 +78,7 @@ function start() {
 
   function EntryEditor({ section, entries, onChange }) {
     const { title, item, fields } = sections[section];
-    return h('section', { className: 'card' },
+    return h('section', { className: 'card', id: section },
       h('div', { className: 'card-heading' }, h('h3', null, title),
         h('button', { className: 'button small', onClick: () => onChange([...entries, {
           id: crypto.randomUUID(),
@@ -91,11 +103,12 @@ function start() {
     return h('section', { className: 'resume-section' }, h('h2', null, title), children);
   }
 
-  function Resume({ draft, order }) {
+  function Resume({ draft, template }) {
     const { contact, summary, skills } = draft;
+    const order = templates[template].order.split(' ');
     const contacts = [contact.email, contact.phone, contact.location, contact.linkedin, contact.website]
       .map(value => value.trim()).filter(Boolean);
-    return h('article', { className: 'resume', 'aria-label': 'Resume document' },
+    return h('article', { className: 'resume format-' + template, 'aria-label': 'Resume document' },
       h('header', { className: 'resume-header' },
         h('h1', null, contact.name.trim() || 'Your Name'),
         contact.headline.trim() && h('p', { className: 'resume-headline' }, contact.headline),
@@ -123,8 +136,10 @@ function start() {
   function App() {
     const [draft, setDraft] = useState(readDraft);
     const [saved, setSaved] = useState(true);
-    const [orderString, tip] = presets[draft.level];
-    const order = orderString.split(' ');
+    const [showGallery, setShowGallery] = useState(() => !draft.template);
+    const [selected, setSelected] = useState(() => draft.template || 'classic');
+    const format = templates[draft.template || selected];
+    const order = format.order.split(' ');
 
     useEffect(() => {
       try {
@@ -149,22 +164,55 @@ function start() {
       }
     }
 
+    function openEditor() {
+      update('template', selected);
+      setShowGallery(false);
+      window.scrollTo(0, 0);
+    }
+
+    function openGallery() {
+      setSelected(draft.template || 'classic');
+      setShowGallery(true);
+      window.scrollTo(0, 0);
+    }
+
     return h(React.Fragment, null,
       h('header', { className: 'topbar' },
         h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'R'), 'ResumeCraft'),
         h('div', { className: 'top-actions' },
           h('span', { className: 'save-status', role: 'status' }, saved ? 'Saved on this device' : 'Draft storage unavailable'),
-          h('button', { className: 'button primary', onClick: printResume }, 'Save as PDF'))),
-      h('main', { className: 'workspace' },
+          !showGallery && h('button', { className: 'button primary', onClick: printResume }, 'Save as PDF'))),
+      showGallery && h('main', { className: 'gallery' },
+        h('div', { className: 'gallery-intro' },
+          h('h1', null, 'Choose your resume template'),
+          h('p', null, 'Pick the format that puts your strongest qualifications first. Each template uses a single column and selectable text.')),
+        h('fieldset', { className: 'template-grid' },
+          h('legend', { className: 'sr-only' }, 'Resume format'),
+          Object.entries(templates).map(([key, item]) => h('label', { key, className: 'template-card' },
+            h('input', { type: 'radio', name: 'template', value: key, checked: selected === key, onChange: () => setSelected(key) }),
+            h('div', { className: 'sample-paper', 'aria-hidden': true }, h(Resume, { draft: demo, template: key })),
+            h('span', { className: 'template-info' },
+              h('strong', null, item.name),
+              h('span', { className: 'audience' }, item.audience),
+              h('span', null, item.description))))),
+        h('div', { className: 'gallery-actions' },
+          draft.template && h('button', { className: 'button', onClick: () => setShowGallery(false) }, 'Back to editor'),
+          h('button', { className: 'button primary', onClick: openEditor }, 'Use ' + templates[selected].name)),
+        h('details', { className: 'template-sources' }, h('summary', null, 'Format references'),
+          h('ul', null,
+            h('li', null, h('a', { href: 'https://www.dol.gov/sites/dolgov/files/vets/files/resumeessentials_pg_interactive_feb2026.pdf' }, 'U.S. Department of Labor resume formats')),
+            h('li', null, h('a', { href: 'https://careerservices.fas.harvard.edu/resources/bullet-point-resume-template/' }, 'Harvard College bullet-point resume template')),
+            h('li', null, h('a', { href: 'https://career.utdallas.edu/career-resource-library/resume-and-cover-letter/' }, 'UT Dallas resume layout guidance'))))),
+      !showGallery && h('main', { className: 'workspace' },
         h('div', { className: 'editor' },
-          h('div', { className: 'intro' }, h('h1', null, 'Build your resume'),
-            h('p', null, 'Edit your details and preview your ATS-friendly resume as you type.')),
-          h('section', { className: 'card preset' },
-            h('label', { className: 'field' }, 'Career level',
-              h('select', { value: draft.level, onChange: event => update('level', event.target.value) },
-                Object.keys(presets).map(level => h('option', { key: level }, level)))),
-            h('p', null, tip)),
-          h('section', { className: 'card' },
+          h('div', { className: 'intro' }, h('h1', null, 'Edit your resume'),
+            h('div', { className: 'format-line' }, h('strong', null, format.name),
+              h('button', { className: 'button small', onClick: openGallery }, 'Change template')),
+            h('p', null, format.tip)),
+          h('nav', { className: 'section-links', 'aria-label': 'Resume sections' },
+            [['contact', 'Contact'], ['summary', 'Summary'], ...order.map(key => [key, sections[key]?.title || 'Skills'])]
+              .map(([key, label]) => h('a', { key, href: '#' + key }, label))),
+          h('section', { className: 'card', id: 'contact' },
             h('h3', null, 'Contact Information'),
             h('div', { className: 'fields' }, contactFields.map(definition => h(Field, {
               key: definition[0], definition, value: draft.contact[definition[0]],
@@ -172,21 +220,21 @@ function start() {
                 contact: { ...current.contact, [definition[0]]: value },
               })),
             })))),
-          h('section', { className: 'card' }, h('h3', null, 'Professional Summary'),
+          h('section', { className: 'card', id: 'summary' }, h('h3', null, 'Professional Summary'),
             h(Field, { definition: ['summary', 'Summary', 'textarea', 'Write a short introduction tailored to your target role.'],
               value: draft.summary, onChange: value => update('summary', value) })),
           order.map(key => key === 'skills'
-            ? h('section', { key, className: 'card' }, h('h3', null, 'Skills'),
+            ? h('section', { key, className: 'card', id: 'skills' }, h('h3', null, 'Skills'),
               h(Field, { definition: ['skills', 'Skills or skill groups', 'textarea', 'Analytics: SQL, Excel, Power BI'],
                 value: draft.skills, onChange: value => update('skills', value) }))
             : h(EntryEditor, { key, section: key, entries: draft[key], onChange: value => update(key, value) })),
           h('button', { className: 'remove reset', onClick: () => {
-            if (window.confirm('Clear this resume draft from this browser?')) setDraft(blankDraft());
+            if (window.confirm('Clear this resume draft from this browser?')) setDraft({ ...blankDraft(), template: draft.template });
           } }, 'Start over')),
         h('aside', { className: 'preview', 'aria-label': 'Live preview' },
           h('div', { className: 'preview-header' }, h('h2', null, 'Live preview'),
             h('span', null, 'US Letter · Single column')),
-          h(Resume, { draft, order }))));
+          h(Resume, { draft, template: draft.template }))));
   }
 
   ReactDOM.createRoot(document.getElementById('root')).render(h(App));
