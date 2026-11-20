@@ -204,7 +204,7 @@ function start() {
         groups[active].push(line);
       }
     }
-    const header = groups.contact.filter(Boolean);
+    const header = groups.contact.filter(Boolean).flatMap(line => line.split(/\s*\|\s*/).filter(Boolean));
     const headerText = header.join(' | ');
     draft.contact.email = headerText.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0] || '';
     draft.contact.phone = headerText.match(/(?:\+\d{1,3}[ .-]?)?\(?\d{2,4}\)?[ .-]?\d{3,5}[ .-]?\d{4}\b/)?.[0] || '';
@@ -230,24 +230,41 @@ function start() {
       }).filter(entry => entry.title);
     }
     if (Object.keys(groups).length === 1) {
-      draft.summary = header.slice(1).join('\n');
       draft.contact.headline = '';
       draft.contact.location = '';
     }
+    const mappedContact = Object.values(draft.contact).filter(Boolean);
+    const remainingHeader = header.filter(line => !mappedContact.includes(line))
+      .map(line => {
+        for (const value of mappedContact) {
+          if (value === draft.contact.email || value === draft.contact.phone || links.includes(value)) {
+            line = line.replace(value, '');
+          }
+        }
+        return line.replace(/^(?:e-?mail|phone|mobile|tel|linkedin|github|portfolio)\s*:\s*$/i, '').trim();
+      }).filter(Boolean);
+    draft.summary = [...remainingHeader, draft.summary].filter(Boolean).join('\n');
     return draft;
   }
 
-  function ImportDialog({ candidate, source, onClose, onApply }) {
+  function ImportDialog({ upload, onClose, onApply }) {
     const dialog = React.useRef(null);
+    const [converted, setConverted] = useState(null);
     useEffect(() => { dialog.current.showModal(); }, []);
     return h('dialog', { ref: dialog, className: 'import-dialog', 'aria-labelledby': 'import-title', onCancel: onClose },
-      h('h2', { id: 'import-title' }, 'Review imported resume'),
-      h('p', null, 'Check the section placement and dates against your original. Applying the import replaces the current draft.'),
-      h('details', null, h('summary', null, 'View extracted text'), h('pre', { className: 'import-text' }, source)),
-      h(Resume, { draft: candidate }),
+      h('h2', { id: 'import-title' }, converted ? 'Review your ATS-friendly resume' : 'Convert to an ATS-friendly resume?'),
+      h('p', null, converted
+        ? 'Compare the preview with your original text. Check that contact details, dates, and achievements are in the right sections. Applying replaces your current draft.'
+        : 'ResumeCraft will use the text from ' + upload.name + ' to build a single-column resume using your existing details. You can review it before applying.'),
+      converted && h(React.Fragment, null,
+        h('details', null, h('summary', null, 'Compare with original extracted text'),
+          h('pre', { className: 'import-text' }, upload.source)),
+        h(Resume, { draft: converted })),
       h('div', { className: 'dialog-actions' },
         h('button', { className: 'button', autoFocus: true, onClick: onClose }, 'Cancel'),
-        h('button', { className: 'button primary', onClick: onApply }, 'Use imported resume')));
+        converted
+          ? h('button', { className: 'button primary', onClick: () => onApply(converted) }, 'Apply to editor')
+          : h('button', { className: 'button primary', onClick: () => setConverted(parseResume(upload.source)) }, 'Convert to ATS-friendly resume')));
   }
 
   function App() {
@@ -268,7 +285,7 @@ function start() {
       try {
         const text = await readResumeFile(file);
         if (!text.trim()) throw new Error('No selectable text was found. For a scanned PDF, upload a Word or text copy.');
-        setCandidate({ draft: parseResume(text), source: text });
+        setCandidate({ name: file.name, source: text });
       } catch (error) {
         setImportError(error instanceof Error ? error.message : 'Could not read this resume.');
       } finally {
@@ -339,8 +356,8 @@ function start() {
         h('aside', { className: 'preview', 'aria-label': 'Live preview' },
           h('div', { className: 'preview-header' }, h('h2', null, 'Live preview'), h('span', null, 'US Letter · Single column')),
           h(Resume, { draft }))),
-      candidate && h(ImportDialog, { candidate: candidate.draft, source: candidate.source, onClose: () => setCandidate(null),
-        onApply: () => { setDraft(candidate.draft); setCandidate(null); } }),
+      candidate && h(ImportDialog, { upload: candidate, onClose: () => setCandidate(null),
+        onApply: converted => { setDraft(converted); setCandidate(null); } }),
       resetOpen && h(ResetDialog, {
         onClose: () => setResetOpen(false),
         onReset: () => { setDraft(blankDraft()); setResetOpen(false); },
