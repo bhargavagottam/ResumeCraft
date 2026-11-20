@@ -67,3 +67,12 @@ dialog h2 { margin: 0; }
   .resume h2, .resume h3, .resume .metadata { break-after: avoid; }
   .resume p, .resume li { widows: 2; orphans: 2; }
 }
+
+.import-box { border: 1px solid #cbd6ea; border-radius: 11px; background: #edf2ff; padding: 12px 15px; margin-bottom: 12px; }
+.import-box p { margin: 6px 0 0; color: #465775; font-size: 13px; }
+.import-box [role=alert] { color: #923732; }
+.import-box input { background: white; }
+.import-dialog { width: min(720px, 92vw); max-width: none; }
+.import-dialog .resume { min-height: 0; border: 1px solid #dce3ef; margin-bottom: 14px; }
+
+.import-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }

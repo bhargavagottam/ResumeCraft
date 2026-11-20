@@ -126,11 +126,155 @@ function start() {
       h('div', { className: 'module-body' }, children));
   }
 
+
+  const importHeadings = {
+    summary: /^(professional |profile |career )?summary$|^profile$|^objective$/,
+    skills: /^(technical |core |professional |soft )?skills$|^competencies$/,
+    experience: /^(work |professional |employment |relevant )?experience$|^employment history$/,
+    projects: /^(selected |technical |academic |personal )?projects$/,
+    education: /^education( and training)?$|^academic background$/,
+    certifications: /^(licenses and )?certifications?$|^certificates$/,
+  };
+
+  async function readResumeFile(file) {
+    if (file.size > 15 * 1024 * 1024) throw new Error('Choose a file smaller than 15 MB.');
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (['txt', 'md'].includes(extension)) {
+      const bytes = await file.arrayBuffer();
+      const prefix = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2));
+      const encoding = prefix[0] === 255 && prefix[1] === 254 ? 'utf-16le'
+        : prefix[0] === 254 && prefix[1] === 255 ? 'utf-16be' : 'utf-8';
+      return new TextDecoder(encoding).decode(bytes);
+    }
+    if (extension === 'docx') {
+      if (!window.mammoth) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.11.0/mammoth.browser.min.js';
+          script.onload = resolve;
+          script.onerror = () => { script.remove(); reject(new Error('Could not load the Word reader. Try again or use a text file.')); };
+          document.head.append(script);
+        });
+      }
+      const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      return result.value.replace(/\n{2,}/g, '\n');
+    }
+    if (extension === 'pdf') {
+      const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
+      const pdfjs = await import(base + 'pdf.min.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+      const task = pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false });
+      try {
+        const pdf = await task.promise;
+        const pages = [];
+        for (let number = 1; number <= pdf.numPages; number++) {
+          const page = await pdf.getPage(number);
+          const { items } = await page.getTextContent();
+          let text = '';
+          let previousY;
+          for (const item of items) {
+            if (!('str' in item)) continue;
+            const y = item.transform[5];
+            if (previousY !== undefined && Math.abs(y - previousY) > 3 && !text.endsWith('\n')) text += '\n';
+            text += item.str + (item.hasEOL ? '\n' : ' ');
+            previousY = y;
+          }
+          pages.push(text);
+        }
+        return pages.join('\n\n');
+      } finally {
+        await task.destroy();
+      }
+    }
+    throw new Error('Choose a PDF, Word (.docx), plain-text (.txt), or Markdown (.md) file.');
+  }
+
+  function parseResume(text) {
+    const draft = blankDraft();
+    const groups = { contact: [] };
+    let active = 'contact';
+    for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
+      const line = raw.trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*?)\*\*$/, '$1');
+      const normalized = line.toLowerCase().replace(/[:–—\s]+$/, '').replace(/\s+/g, ' ');
+      const section = Object.keys(importHeadings).find(key => importHeadings[key].test(normalized));
+      if (section) {
+        active = section;
+        groups[active] ??= [];
+      } else if (line || groups[active].at(-1)) {
+        groups[active].push(line);
+      }
+    }
+    const header = groups.contact.filter(Boolean);
+    const headerText = header.join(' | ');
+    draft.contact.email = headerText.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0] || '';
+    draft.contact.phone = headerText.match(/(?:\+\d{1,3}[ .-]?)?\(?\d{2,4}\)?[ .-]?\d{3,5}[ .-]?\d{4}\b/)?.[0] || '';
+    const links = headerText.match(/(?:https?:\/\/|www\.|(?:linkedin|github)\.com\/)[^\s|,;<>()[\]]+/gi) || [];
+    draft.contact.linkedin = links.find(link => /linkedin\.com/i.test(link)) || '';
+    draft.contact.website = links.find(link => !/linkedin\.com/i.test(link)) || '';
+    const plainHeader = header.filter(line => !/@|https?:|linkedin\.com|github\.com|\d{5,}/i.test(line) && !line.includes('|'));
+    draft.contact.name = plainHeader[0] || '';
+    draft.contact.headline = plainHeader[1] || '';
+    draft.contact.location = plainHeader[2] || '';
+
+    function clean(line) {
+      return line.replace(/^[•●▪*–-]\s*/, '').trim();
+    }
+
+    for (const key of ['summary', 'skills']) draft[key] = (groups[key] || []).map(clean).filter(Boolean).join('\n');
+    for (const key of ['experience', 'projects', 'education', 'certifications']) {
+      const body = (groups[key] || []).join('\n').trim();
+      if (!body) continue;
+      draft[key] = body.split(key === 'certifications' ? /\n+/ : /\n\s*\n(?=[^\s•●▪*–-])/).map(block => {
+        const [title, ...details] = block.split('\n').map(clean).filter(Boolean);
+        return { id: crypto.randomUUID(), title, organization: '', dates: '', location: '', url: '', details: details.join('\n') };
+      }).filter(entry => entry.title);
+    }
+    if (Object.keys(groups).length === 1) {
+      draft.summary = header.slice(1).join('\n');
+      draft.contact.headline = '';
+      draft.contact.location = '';
+    }
+    return draft;
+  }
+
+  function ImportDialog({ candidate, source, onClose, onApply }) {
+    const dialog = React.useRef(null);
+    useEffect(() => { dialog.current.showModal(); }, []);
+    return h('dialog', { ref: dialog, className: 'import-dialog', 'aria-labelledby': 'import-title', onCancel: onClose },
+      h('h2', { id: 'import-title' }, 'Review imported resume'),
+      h('p', null, 'Check the section placement and dates against your original. Applying the import replaces the current draft.'),
+      h('details', null, h('summary', null, 'View extracted text'), h('pre', { className: 'import-text' }, source)),
+      h(Resume, { draft: candidate }),
+      h('div', { className: 'dialog-actions' },
+        h('button', { className: 'button', autoFocus: true, onClick: onClose }, 'Cancel'),
+        h('button', { className: 'button primary', onClick: onApply }, 'Use imported resume')));
+  }
+
   function App() {
     const [draft, setDraft] = useState(readDraft);
     const [saved, setSaved] = useState(true);
     const [preview, setPreview] = useState(false);
     const [resetOpen, setResetOpen] = useState(false);
+    const [candidate, setCandidate] = useState(null);
+    const [importing, setImporting] = useState(false);
+    const [importError, setImportError] = useState('');
+
+    async function uploadResume(event) {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      setImporting(true);
+      setImportError('');
+      try {
+        const text = await readResumeFile(file);
+        if (!text.trim()) throw new Error('No selectable text was found. For a scanned PDF, upload a Word or text copy.');
+        setCandidate({ draft: parseResume(text), source: text });
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : 'Could not read this resume.');
+      } finally {
+        setImporting(false);
+      }
+    }
 
     useEffect(() => {
       try {
@@ -168,6 +312,12 @@ function start() {
         h('section', { className: 'editor', 'aria-label': 'Resume editor' },
           h('h1', null, 'Build your resume'),
           h('p', { className: 'intro' }, 'Open a section to edit it. Your resume updates as you type.'),
+          h('div', { className: 'import-box' },
+            h('label', { className: 'field' }, 'Upload an existing resume',
+              h('input', { type: 'file', accept: '.pdf,.docx,.txt,.md', disabled: importing, onChange: uploadResume })),
+            h('p', null, 'PDF with selectable text, Word (.docx), TXT, or Markdown. Up to 15 MB.'),
+            importing && h('p', { role: 'status' }, 'Reading your resume…'),
+            importError && h('p', { role: 'alert' }, importError)),
           h(Module, { title: 'Contact information', initiallyOpen: true, status: draft.contact.name.trim() },
             h('div', { className: 'fields' }, contactFields.map(definition => h(Field, {
               key: definition[0], definition, value: draft.contact[definition[0]],
@@ -189,6 +339,8 @@ function start() {
         h('aside', { className: 'preview', 'aria-label': 'Live preview' },
           h('div', { className: 'preview-header' }, h('h2', null, 'Live preview'), h('span', null, 'US Letter · Single column')),
           h(Resume, { draft }))),
+      candidate && h(ImportDialog, { candidate: candidate.draft, source: candidate.source, onClose: () => setCandidate(null),
+        onApply: () => { setDraft(candidate.draft); setCandidate(null); } }),
       resetOpen && h(ResetDialog, {
         onClose: () => setResetOpen(false),
         onReset: () => { setDraft(blankDraft()); setResetOpen(false); },
