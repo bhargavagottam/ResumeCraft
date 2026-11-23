@@ -68,11 +68,60 @@ dialog h2 { margin: 0; }
   .resume p, .resume li { widows: 2; orphans: 2; }
 }
 
-.import-box { border: 1px solid #cbd6ea; border-radius: 11px; background: #edf2ff; padding: 12px 15px; margin-bottom: 12px; }
-.import-box p { margin: 6px 0 0; color: #465775; font-size: 13px; }
+:root {
+  --ink: #242923;
+  --muted: #526158;
+  --line: #dce3da;
+  --accent: #174b39;
+  color: var(--ink);
+  background: #f7f8f4;
+}
+.topbar { padding-block: 16px; border-color: var(--line); }
+.brand { font-family: Georgia, serif; font-size: 24px; font-weight: 700; letter-spacing: -.035em; }
+.mark { color: white; background: var(--accent); border-radius: 10px 10px 10px 2px; font-family: Georgia, serif; font-size: 22px; }
+.save-status { color: var(--muted); }
+.button { color: var(--accent); border-color: #bfcfc4; }
+.button:hover, .button[aria-pressed=true] { background: #e8f1eb; }
+.button.primary { color: white; background: var(--accent); border-color: var(--accent); }
+.button.primary:hover { background: #103c2d; }
+.button:disabled { opacity: .6; cursor: wait; }
+:focus-visible { outline-color: #347951; }
+.workspace { padding-top: 32px; }
+.editor h1 { font: 700 clamp(34px, 4vw, 48px)/1.07 Georgia, serif; letter-spacing: -.05em; }
+.intro { margin: 9px 0 20px; color: var(--muted); }
+.import-box { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px 12px; padding: 16px; margin-bottom: 19px; border: 1px dashed #88a697; border-radius: 14px; background: #edf4ee; }
+.import-box:focus-within, .import-box:hover { border-color: var(--accent); }
+.upload-icon { display: grid; place-items: center; font-size: 23px; line-height: 1; width: 34px; height: 34px; border-radius: 9px; color: var(--accent); background: #dae9df; }
+.upload-copy h2 { margin: 0; font-size: 15px; }
+.import-box p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.import-box .local-note { margin-top: 7px; }
+.import-box [role=alert], .import-box [role=status] { grid-column: 1 / -1; }
 .import-box [role=alert] { color: #923732; }
-.import-box input { background: white; }
-.import-dialog { width: min(720px, 92vw); max-width: none; }
-.import-dialog .resume { min-height: 0; border: 1px solid #dce3ef; margin-bottom: 14px; }
-
-.import-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.upload-button { white-space: nowrap; font-size: 13px; }
+.module { border-color: var(--line); box-shadow: 0 2px 4px #24322506; }
+.module summary { padding-block: 14px; }
+.module summary::marker { color: var(--accent); }
+.module[open] summary { border-bottom: 1px solid #eef0ea; }
+.module-body { padding-top: 13px; }
+.field input, .field textarea, fieldset { border-color: var(--line); }
+.field input, .field textarea { background: #fbfcfa; }
+.preview { background: #e8ede6; border-color: var(--line); border-radius: 16px; padding: clamp(10px, 2vw, 25px); }
+.preview-header { margin-bottom: 14px; }
+.preview-header span { color: var(--muted); }
+.resume { box-shadow: 0 4px 18px #1e2e2217; }
+.resume-header h1 { font-family: Georgia, serif; }
+dialog { color: var(--ink); border-color: var(--line); border-radius: 16px; box-shadow: 0 18px 65px #15231d48; }
+dialog::backdrop { background: #15231d80; }
+dialog h2 { font: 700 26px/1.15 Georgia, serif; }
+.import-dialog { width: min(800px, 94vw); max-width: none; }
+.import-dialog .resume { min-height: 0; border: 1px solid var(--line); }
+.compare-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.compare-panel { background: #edf1eb; border-radius: 10px; padding: 10px; max-height: 50vh; overflow: auto; margin-bottom: 16px; }
+.import-text { margin: 0; padding: 12px; background: white; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.5 system-ui, sans-serif; }
+.dialog-actions { flex-wrap: wrap; }
+@media (max-width: 490px) { .import-box { grid-template-columns: auto minmax(0, 1fr); } .upload-button { grid-column: 2; justify-self: start; } }
+@media print {
+  :root { color: black; background: white; }
+  .workspace .preview { padding: 0; border: 0; border-radius: 0; background: white; }
+  .resume { box-shadow: none; }
+}

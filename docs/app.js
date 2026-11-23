@@ -9,7 +9,7 @@ if (!window.React || !window.ReactDOM) {
 function start() {
   const { createElement: h, useState, useEffect } = React;
   const storageKey = 'resume-craft:draft:v1';
-  const sectionOrder = ['experience', 'projects', 'skills', 'education', 'certifications'];
+  const sectionOrder = ['experience', 'projects', 'skills', 'education', 'certifications', 'additional'];
   const sections = {
     experience: { title: 'Work Experience', item: 'role', fields: [
       ['title', 'Job title'], ['organization', 'Employer'], ['location', 'Location'], ['dates', 'Dates', 'text', 'Jun 2022 – Present'],
@@ -25,6 +25,10 @@ function start() {
     ] },
     certifications: { title: 'Certifications', item: 'certification', fields: [
       ['title', 'Certification name'], ['organization', 'Issuing organization'], ['dates', 'Date'],
+      ['details', 'Credential details (one per line)', 'textarea'],
+    ] },
+    additional: { title: 'Additional Information', item: 'section', fields: [
+      ['title', 'Section heading'], ['details', 'Details (one per line)', 'textarea'],
     ] },
   };
   const contactFields = [
@@ -36,7 +40,7 @@ function start() {
   function blankDraft() {
     return {
       contact: Object.fromEntries(contactFields.map(([key]) => [key, ''])),
-      summary: '', skills: '', experience: [], projects: [], education: [], certifications: [],
+      summary: '', skills: '', experience: [], projects: [], education: [], certifications: [], additional: [],
     };
   }
 
@@ -106,6 +110,9 @@ function start() {
         }
         const entries = draft[key].filter(({ id, ...values }) => Object.values(values).some(value => value.trim()));
         if (!entries.length) return null;
+        if (key === 'additional') return entries.map(entry =>
+          h(ResumeSection, { key: entry.id, title: entry.title.trim() || sections[key].title },
+            h('p', null, entry.details)));
         return h(ResumeSection, { key, title: sections[key].title }, entries.map(entry => {
           const metadata = [entry.organization, entry.location, entry.dates].filter(value => value?.trim());
           const bullets = lines(entry.details || '');
@@ -133,7 +140,8 @@ function start() {
     experience: /^(work |professional |employment |relevant )?experience$|^employment history$/,
     projects: /^(selected |technical |academic |personal )?projects$/,
     education: /^education( and training)?$|^academic background$/,
-    certifications: /^(licenses and )?certifications?$|^certificates$/,
+    certifications: /^(licenses and |professional )?certifications?$|^certificates$|^licenses$/,
+    additional: /^(awards( and honors)?|honors( and awards)?|publications|languages|interests|volunteer(ing| experience| work)?|leadership( and activities)?|activities|references|professional affiliations|achievements|additional information)$/,
   };
 
   async function readResumeFile(file) {
@@ -157,7 +165,7 @@ function start() {
         });
       }
       const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-      return result.value.replace(/\n{2,}/g, '\n');
+      return result.value.trim();
     }
     if (extension === 'pdf') {
       const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
@@ -189,19 +197,59 @@ function start() {
     throw new Error('Choose a PDF, Word (.docx), plain-text (.txt), or Markdown (.md) file.');
   }
 
+  const bulletStart = /^(?:[•●▪◦*]|\u2013|-(?=\s))\s*/;
+  const dateRange = /(?:\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+)?\b(?:19|20)\d{2}\s*(?:[-–—]|to)\s*(?:(?:[A-Za-z]+\.?\s+)?(?:19|20)\d{2}|present|current|now)\b/i;
+
+  function cleanBullet(line) {
+    return line.replace(bulletStart, '').trim();
+  }
+
+  function splitEntries(raw, key) {
+    const entries = [];
+    let entry = [];
+    let pendingBreak = false;
+    for (const line of raw) {
+      if (!line) {
+        pendingBreak = true;
+        continue;
+      }
+      const last = entry.at(-1) || '';
+      const nextEntry = entry.length && !bulletStart.test(line) && (
+        (pendingBreak && bulletStart.test(last)) ||
+        (dateRange.test(line) && entry.some(previous => dateRange.test(previous)))
+      );
+      if (nextEntry) {
+        entries.push(entry);
+        entry = [];
+      }
+      entry.push(line);
+      pendingBreak = false;
+    }
+    if (entry.length) entries.push(entry);
+    if (key === 'certifications' && entries.length === 1 && entries[0].every(line => bulletStart.test(line))) {
+      return entries[0].map(line => [line]);
+    }
+    return entries;
+  }
+
   function parseResume(text) {
     const draft = blankDraft();
     const groups = { contact: [] };
-    let active = 'contact';
+    const additional = [];
+    let active = groups.contact;
     for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
       const line = raw.trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*?)\*\*$/, '$1');
       const normalized = line.toLowerCase().replace(/[:–—\s]+$/, '').replace(/\s+/g, ' ');
       const section = Object.keys(importHeadings).find(key => importHeadings[key].test(normalized));
       if (section) {
-        active = section;
-        groups[active] ??= [];
-      } else if (line || groups[active].at(-1)) {
-        groups[active].push(line);
+        if (section === 'additional') {
+          active = [];
+          additional.push({ title: line.replace(/:$/, ''), body: active });
+        } else {
+          active = groups[section] ??= [];
+        }
+      } else if (line || active.at(-1)) {
+        active.push(line);
       }
     }
     const header = groups.contact.filter(Boolean).flatMap(line => line.split(/\s*\|\s*/).filter(Boolean));
@@ -211,24 +259,29 @@ function start() {
     const links = headerText.match(/(?:https?:\/\/|www\.|(?:linkedin|github)\.com\/)[^\s|,;<>()[\]]+/gi) || [];
     draft.contact.linkedin = links.find(link => /linkedin\.com/i.test(link)) || '';
     draft.contact.website = links.find(link => !/linkedin\.com/i.test(link)) || '';
-    const plainHeader = header.filter(line => !/@|https?:|linkedin\.com|github\.com|\d{5,}/i.test(line) && !line.includes('|'));
+    const plainHeader = header.filter(line => !/@|https?:|www\.|linkedin\.com|github\.com|\d{5,}|^(?:phone|mobile|tel|email)\s*:/i.test(line) && !line.includes('|'));
     draft.contact.name = plainHeader[0] || '';
     draft.contact.headline = plainHeader[1] || '';
     draft.contact.location = plainHeader[2] || '';
 
-    function clean(line) {
-      return line.replace(/^[•●▪*–-]\s*/, '').trim();
+    for (const key of ['summary', 'skills']) {
+      draft[key] = (groups[key] || []).map(cleanBullet).filter(Boolean).join('\n');
     }
-
-    for (const key of ['summary', 'skills']) draft[key] = (groups[key] || []).map(clean).filter(Boolean).join('\n');
     for (const key of ['experience', 'projects', 'education', 'certifications']) {
-      const body = (groups[key] || []).join('\n').trim();
-      if (!body) continue;
-      draft[key] = body.split(key === 'certifications' ? /\n+/ : /\n\s*\n(?=[^\s•●▪*–-])/).map(block => {
-        const [title, ...details] = block.split('\n').map(clean).filter(Boolean);
-        return { id: crypto.randomUUID(), title, organization: '', dates: '', location: '', url: '', details: details.join('\n') };
+      draft[key] = splitEntries(groups[key] || [], key).map(block => {
+        const [first, ...body] = block.map(cleanBullet).filter(Boolean);
+        const title = first || '';
+        const dateLine = body.find(line => dateRange.test(line) && line.match(dateRange)[0] === line);
+        const url = key === 'projects' ? body.find(line => /^https?:\/\/\S+$/i.test(line)) : '';
+        return {
+          id: crypto.randomUUID(), title, organization: '', dates: dateLine || '', location: '', url: url || '',
+          details: body.filter(line => line !== dateLine && line !== url).join('\n'),
+        };
       }).filter(entry => entry.title);
     }
+    draft.additional = additional.filter(({ body }) => body.some(Boolean)).map(({ title, body }) => ({
+      id: crypto.randomUUID(), title, details: body.map(cleanBullet).filter(Boolean).join('\n'),
+    }));
     if (Object.keys(groups).length === 1) {
       draft.contact.headline = '';
       draft.contact.location = '';
@@ -250,16 +303,22 @@ function start() {
   function ImportDialog({ upload, onClose, onApply }) {
     const dialog = React.useRef(null);
     const [converted, setConverted] = useState(null);
+    const [panel, setPanel] = useState('preview');
+    const reviewHeading = React.useRef(null);
+    useEffect(() => { if (converted) reviewHeading.current?.focus(); }, [converted]);
     useEffect(() => { dialog.current.showModal(); }, []);
     return h('dialog', { ref: dialog, className: 'import-dialog', 'aria-labelledby': 'import-title', onCancel: onClose },
-      h('h2', { id: 'import-title' }, converted ? 'Review your ATS-friendly resume' : 'Convert to an ATS-friendly resume?'),
+      h('h2', { id: 'import-title', tabIndex: -1, ref: reviewHeading }, converted ? 'Review your ATS-friendly resume' : 'Convert to an ATS-friendly resume?'),
       h('p', null, converted
         ? 'Compare the preview with your original text. Check that contact details, dates, and achievements are in the right sections. Applying replaces your current draft.'
         : 'ResumeCraft will use the text from ' + upload.name + ' to build a single-column resume using your existing details. You can review it before applying.'),
       converted && h(React.Fragment, null,
-        h('details', null, h('summary', null, 'Compare with original extracted text'),
-          h('pre', { className: 'import-text' }, upload.source)),
-        h(Resume, { draft: converted })),
+        h('div', { className: 'compare-tabs', role: 'group', 'aria-label': 'Compare versions' },
+          [['preview', 'Formatted resume'], ['source', 'Original text']].map(([key, label]) =>
+            h('button', { key, className: 'button small', 'aria-pressed': panel === key, onClick: () => setPanel(key) }, label))),
+        h('div', { className: 'compare-panel' }, panel === 'preview'
+          ? h(Resume, { draft: converted })
+          : h('pre', { className: 'import-text' }, upload.source))),
       h('div', { className: 'dialog-actions' },
         h('button', { className: 'button', autoFocus: true, onClick: onClose }, 'Cancel'),
         converted
@@ -276,10 +335,12 @@ function start() {
     const [importing, setImporting] = useState(false);
     const [importError, setImportError] = useState('');
 
-    async function uploadResume(event) {
-      const file = event.target.files[0];
-      event.target.value = '';
-      if (!file) return;
+    const uploadInput = React.useRef(null);
+    const reading = React.useRef(false);
+
+    async function uploadResume(file) {
+      if (!file || reading.current) return;
+      reading.current = true;
       setImporting(true);
       setImportError('');
       try {
@@ -289,6 +350,7 @@ function start() {
       } catch (error) {
         setImportError(error instanceof Error ? error.message : 'Could not read this resume.');
       } finally {
+        reading.current = false;
         setImporting(false);
       }
     }
@@ -318,7 +380,7 @@ function start() {
 
     return h(React.Fragment, null,
       h('header', { className: 'topbar' },
-        h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'RC'), 'ResumeCraft'),
+        h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'R'), 'ResumeCraft'),
         h('div', { className: 'top-actions' },
           h('span', { className: 'save-status', role: 'status' }, saved ? 'Saved on this device' : 'Draft storage unavailable'),
           h('button', { className: 'button primary', onClick: printResume }, 'Save as PDF'))),
@@ -327,12 +389,23 @@ function start() {
           h('button', { className: 'button', 'aria-pressed': !preview, onClick: () => setPreview(false) }, 'Edit'),
           h('button', { className: 'button', 'aria-pressed': preview, onClick: () => setPreview(true) }, 'Preview')),
         h('section', { className: 'editor', 'aria-label': 'Resume editor' },
-          h('h1', null, 'Build your resume'),
-          h('p', { className: 'intro' }, 'Open a section to edit it. Your resume updates as you type.'),
-          h('div', { className: 'import-box' },
-            h('label', { className: 'field' }, 'Upload an existing resume',
-              h('input', { type: 'file', accept: '.pdf,.docx,.txt,.md', disabled: importing, onChange: uploadResume })),
-            h('p', null, 'PDF with selectable text, Word (.docx), TXT, or Markdown. Up to 15 MB.'),
+          h('h1', null, 'Resume editor'),
+          h('p', { className: 'intro' }, 'Import an existing resume or start with your contact details.'),
+          h('section', { className: 'import-box', 'aria-label': 'Import resume',
+            onDragOver: event => event.preventDefault(),
+            onDrop: event => { event.preventDefault(); uploadResume(event.dataTransfer.files[0]); } },
+            h('div', { className: 'upload-icon', 'aria-hidden': true }, '↑'),
+            h('div', { className: 'upload-copy' },
+              h('h2', null, 'Import a resume'),
+              h('p', null, 'Drop a text-based PDF, DOCX, TXT, or Markdown file here. Up to 15 MB.'),
+              h('p', { className: 'local-note' }, 'Your file is processed on this device.')),
+            h('input', { ref: uploadInput, type: 'file', hidden: true, accept: '.pdf,.docx,.txt,.md', onChange: event => {
+              const file = event.target.files[0];
+              event.target.value = '';
+              uploadResume(file);
+            } }),
+            h('button', { className: 'button upload-button', disabled: importing, onClick: () => uploadInput.current.click() },
+              importing ? 'Reading file…' : 'Choose file'),
             importing && h('p', { role: 'status' }, 'Reading your resume…'),
             importError && h('p', { role: 'alert' }, importError)),
           h(Module, { title: 'Contact information', initiallyOpen: true, status: draft.contact.name.trim() },
