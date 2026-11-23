@@ -326,7 +326,68 @@ function start() {
           : h('button', { className: 'button primary', onClick: () => setConverted(parseResume(upload.source)) }, 'Convert to ATS-friendly resume')));
   }
 
-  function Download({ name, onPrint }) {
+  let pdfReader;
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => { script.remove(); reject(new Error('PDF exporter could not load.')); };
+      document.head.append(script);
+    });
+  }
+
+  async function createResumePdf(blocks) {
+    const base = 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.20/build/';
+    pdfReader ??= loadScript(base + 'pdfmake.min.js')
+      .then(() => loadScript(base + 'vfs_fonts.js'))
+      .catch(error => { pdfReader = null; throw error; });
+    await pdfReader;
+
+    const content = blocks.map(block => {
+      const tag = block.tagName;
+      const text = block.textContent;
+      const anchor = block.querySelector('a[href]');
+      const link = anchor && /^https?:\/\//i.test(anchor.href) ? anchor.href : undefined;
+      if (tag === 'LI') return { ul: [text], margin: [12, 0, 0, 3] };
+      if (tag === 'H2') return {
+        stack: [
+          { text, bold: true, fontSize: 12, margin: [0, 0, 0, 2] },
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 522, y2: 0, lineWidth: .5, lineColor: '#777777' }] },
+        ],
+        margin: [0, 10, 0, 5],
+        headlineLevel: 1,
+      };
+      if (tag === 'H3') return { text, bold: true, margin: [0, 5, 0, 3], headlineLevel: 2 };
+      if (tag === 'H1') return { text, alignment: 'center', fontSize: 23, bold: true, margin: [0, 0, 0, 4], headlineLevel: 1 };
+      return {
+        text, link, decoration: link ? 'underline' : undefined,
+        alignment: block.closest('.resume-header') ? 'center' : 'left',
+        bold: block.classList.contains('resume-headline'),
+        margin: [0, 0, 0, 4],
+      };
+    });
+
+    return new Promise((resolve, reject) => {
+      const pdf = window.pdfMake.createPdf({
+        pageSize: 'LETTER',
+        pageMargins: [45, 45, 45, 45],
+        defaultStyle: { font: 'Roboto', fontSize: 11, lineHeight: 1.12 },
+        content,
+        pageBreakBefore: (node, following) => Boolean(node.headlineLevel && !following.length),
+      });
+      const timeout = setTimeout(() => reject(new Error('PDF export did not finish.')), 20000);
+      try {
+        pdf.getBlob(blob => { clearTimeout(timeout); resolve(blob); });
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  }
+
+  function Download({ name }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const menu = React.useRef(null);
@@ -340,7 +401,9 @@ function start() {
         const blocks = Array.from(document.querySelectorAll('.preview .resume :is(h1,h2,h3,p,li)'));
         const filename = name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '') || 'Resume';
         let blob;
-        if (format === 'txt') {
+        if (format === 'pdf') {
+          blob = await createResumePdf(blocks);
+        } else if (format === 'txt') {
           const text = blocks.map(block => {
             const prefix = block.tagName === 'LI' ? '- ' : block.tagName === 'H2' ? '\n' : '';
             return prefix + block.textContent;
@@ -389,11 +452,7 @@ function start() {
       } },
         h('summary', { className: 'button primary' }, busy ? 'Preparing download…' : 'Download'),
         h('div', { className: 'download-options', role: 'group', 'aria-label': 'Download format' },
-          h('button', { disabled: busy, onClick: () => {
-            menu.current.open = false;
-            menu.current.querySelector('summary').focus();
-            onPrint();
-          } }, 'PDF (.pdf)', h('span', null, 'Opens the print dialog')),
+          h('button', { disabled: busy, onClick: () => download('pdf') }, 'PDF (.pdf)'),
           h('button', { disabled: busy, onClick: () => download('docx') }, 'Word (.docx)'),
           h('button', { disabled: busy, onClick: () => download('txt') }, 'Plain text (.txt)'))),
       error && h('p', { className: 'download-error', role: 'alert' }, error));
@@ -441,22 +500,12 @@ function start() {
       setDraft(current => ({ ...current, [key]: value }));
     }
 
-    function printResume() {
-      const previous = document.title;
-      document.title = (draft.contact.name.trim() || 'ResumeCraft') + ' - Resume';
-      try {
-        window.print();
-      } finally {
-        document.title = previous;
-      }
-    }
-
     return h(React.Fragment, null,
       h('header', { className: 'topbar' },
         h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'R'), 'ResumeCraft'),
         h('div', { className: 'top-actions' },
           h('span', { className: 'save-status', role: 'status' }, saved ? 'Saved on this device' : 'Draft storage unavailable'),
-          h(Download, { name: draft.contact.name, onPrint: printResume }))),
+          h(Download, { name: draft.contact.name }))),
       h('main', { className: 'workspace' + (preview ? ' show-preview' : '') },
         h('div', { className: 'mobile-bar', role: 'group', 'aria-label': 'Workspace view' },
           h('button', { className: 'button', 'aria-pressed': !preview, onClick: () => setPreview(false) }, 'Edit'),
