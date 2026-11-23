@@ -326,6 +326,79 @@ function start() {
           : h('button', { className: 'button primary', onClick: () => setConverted(parseResume(upload.source)) }, 'Convert to ATS-friendly resume')));
   }
 
+  function Download({ name, onPrint }) {
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const menu = React.useRef(null);
+
+    async function download(format) {
+      menu.current.open = false;
+      menu.current.querySelector('summary').focus();
+      setError('');
+      setBusy(true);
+      try {
+        const blocks = Array.from(document.querySelectorAll('.preview .resume :is(h1,h2,h3,p,li)'));
+        const filename = name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '') || 'Resume';
+        let blob;
+        if (format === 'txt') {
+          const text = blocks.map(block => {
+            const prefix = block.tagName === 'LI' ? '- ' : block.tagName === 'H2' ? '\n' : '';
+            return prefix + block.textContent;
+          }).join('\n');
+          blob = new Blob([text + '\n'], { type: 'text/plain;charset=utf-8' });
+        } else {
+          const { Document, Paragraph, TextRun, Packer, HeadingLevel, AlignmentType } =
+            await import('https://cdn.jsdelivr.net/npm/docx@9.5.1/+esm');
+          const headings = { H1: HeadingLevel.TITLE, H2: HeadingLevel.HEADING_1, H3: HeadingLevel.HEADING_2 };
+          const children = blocks.map(block => new Paragraph({
+            children: block.textContent.split('\n').map((part, index) => new TextRun({
+              text: part, break: index ? 1 : 0, font: 'Arial',
+            })),
+            heading: headings[block.tagName],
+            bullet: block.tagName === 'LI' ? { level: 0 } : undefined,
+            alignment: block.closest('.resume-header') ? AlignmentType.CENTER : undefined,
+            keepNext: Boolean(headings[block.tagName]),
+            spacing: { after: 70 },
+          }));
+          blob = await Packer.toBlob(new Document({ sections: [{
+            properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
+            children,
+          }] }));
+        }
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename + '.' + format;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch {
+        setError('Download failed. Please try again or choose another format.');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    return h('div', { className: 'download-control' },
+      h('details', { ref: menu, className: 'download-menu', onKeyDown: event => {
+        if (event.key === 'Escape') {
+          menu.current.open = false;
+          menu.current.querySelector('summary').focus();
+        }
+      } },
+        h('summary', { className: 'button primary' }, busy ? 'Preparing download…' : 'Download'),
+        h('div', { className: 'download-options', role: 'group', 'aria-label': 'Download format' },
+          h('button', { disabled: busy, onClick: () => {
+            menu.current.open = false;
+            menu.current.querySelector('summary').focus();
+            onPrint();
+          } }, 'PDF (.pdf)', h('span', null, 'Opens the print dialog')),
+          h('button', { disabled: busy, onClick: () => download('docx') }, 'Word (.docx)'),
+          h('button', { disabled: busy, onClick: () => download('txt') }, 'Plain text (.txt)'))),
+      error && h('p', { className: 'download-error', role: 'alert' }, error));
+  }
+
   function App() {
     const [draft, setDraft] = useState(readDraft);
     const [saved, setSaved] = useState(true);
@@ -383,7 +456,7 @@ function start() {
         h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'R'), 'ResumeCraft'),
         h('div', { className: 'top-actions' },
           h('span', { className: 'save-status', role: 'status' }, saved ? 'Saved on this device' : 'Draft storage unavailable'),
-          h('button', { className: 'button primary', onClick: printResume }, 'Save as PDF'))),
+          h(Download, { name: draft.contact.name, onPrint: printResume }))),
       h('main', { className: 'workspace' + (preview ? ' show-preview' : '') },
         h('div', { className: 'mobile-bar', role: 'group', 'aria-label': 'Workspace view' },
           h('button', { className: 'button', 'aria-pressed': !preview, onClick: () => setPreview(false) }, 'Edit'),

@@ -15,3 +15,5 @@ Serve the repository with `python -m http.server 8000` and open http://localhost
 ## GitHub Pages
 
 In **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/ (root)`, and save. The published site will be at https://bhargavagottam.github.io/ResumeCraft/.
+
+Use **Download** for Word (.docx), plain text (.txt), or PDF through your browser’s print dialog.

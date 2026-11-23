@@ -125,3 +125,13 @@ dialog h2 { font: 700 26px/1.15 Georgia, serif; }
   .workspace .preview { padding: 0; border: 0; border-radius: 0; background: white; }
   .resume { box-shadow: none; }
 }
+
+.download-control { position: relative; }
+.download-menu summary { list-style: none; white-space: nowrap; }
+.download-menu summary::-webkit-details-marker { display: none; }
+.download-menu summary::after { content: ' ▾'; margin-left: 5px; }
+.download-options, .download-error { position: absolute; z-index: 5; inset-inline-end: 0; top: calc(100% + 7px); width: 205px; border: 1px solid var(--line); border-radius: 10px; padding: 5px; background: #fff; box-shadow: 0 9px 24px #15231d26; }
+.download-options button { display: block; width: 100%; text-align: start; border: 0; border-radius: 6px; padding: 8px 10px; background: transparent; color: var(--ink); }
+.download-options button:hover { background: #edf4ee; }
+.download-options span { display: block; color: var(--muted); font-size: 12px; }
+.download-error { top: auto; margin: 6px 0 0; color: #923732; padding: 10px; }
