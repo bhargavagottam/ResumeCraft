@@ -135,3 +135,11 @@ dialog h2 { font: 700 26px/1.15 Georgia, serif; }
 .download-options button:hover { background: #edf4ee; }
 .download-options span { display: block; color: var(--muted); font-size: 12px; }
 .download-error { top: auto; margin: 6px 0 0; color: #923732; padding: 10px; }
+
+.pdf-pages { display: grid; gap: 22px; }
+.pdf-page { min-width: 0; margin: 0; }
+.pdf-page figcaption { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.pdf-page img { display: block; width: 100%; height: auto; background: #fff; box-shadow: 0 4px 18px #1e2e2217; }
+.preview-text { margin-top: 16px; color: var(--muted); font-size: 13px; }
+.preview-text .resume { margin-top: 8px; }
+@media print { .pdf-pages, .preview-text > summary { display: none; } .preview-text > div { display: block; } }

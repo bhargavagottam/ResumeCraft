@@ -17,3 +17,5 @@ Serve the repository with `python -m http.server 8000` and open http://localhost
 In **Settings → Pages**, choose **Deploy from a branch**, select `main` and `/ (root)`, and save. The published site will be at https://bhargavagottam.github.io/ResumeCraft/.
 
 Use **Download** for Word (.docx), plain text (.txt), or a direct PDF download.
+
+The preview shows the actual PDF pages and page count. Word may paginate differently depending on the editor.

@@ -387,7 +387,72 @@ function start() {
     });
   }
 
-  function Download({ name }) {
+  function PdfPreview({ draft, getPdf }) {
+    const [pages, setPages] = useState([]);
+    const [status, setStatus] = useState('loading');
+    const [retry, setRetry] = useState(0);
+
+    useEffect(() => {
+      let active = true;
+      let task;
+      let render;
+      setStatus('loading');
+      const timer = setTimeout(async () => {
+        try {
+          const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
+          const [blob, pdfjs] = await Promise.all([getPdf(draft), import(base + 'pdf.min.mjs')]);
+          const data = await blob.arrayBuffer();
+          if (!active) return;
+          pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+          task = pdfjs.getDocument({ data, isEvalSupported: false });
+          const pdf = await task.promise;
+          const images = [];
+          for (let number = 1; number <= pdf.numPages; number++) {
+            const page = await pdf.getPage(number);
+            if (!active) return;
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            render = page.render({ canvasContext: canvas.getContext('2d'), viewport });
+            await render.promise;
+            images.push(canvas.toDataURL());
+            page.cleanup();
+          }
+          if (active) {
+            setPages(images);
+            setStatus('ready');
+          }
+        } catch {
+          if (active) setStatus('error');
+        } finally {
+          if (active && task) {
+            const completed = task;
+            task = null;
+            await completed.destroy().catch(() => {});
+          }
+        }
+      }, 300);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+        render?.cancel();
+        task?.destroy().catch(() => {});
+      };
+    }, [draft, getPdf, retry]);
+
+    return h(React.Fragment, null,
+      h('div', { className: 'preview-header' }, h('h2', null, 'PDF preview'),
+        h('span', { role: 'status' }, status === 'ready' ? 'US Letter · ' + pages.length + (pages.length === 1 ? ' page' : ' pages')
+          : status === 'loading' ? 'Updating pages…' : 'Preview unavailable')),
+      status === 'error' && h('button', { className: 'button small', onClick: () => setRetry(value => value + 1) }, 'Retry preview'),
+      status !== 'error' && h('div', { className: 'pdf-pages', 'aria-busy': status === 'loading' },
+        pages.map((src, index) => h('figure', { className: 'pdf-page', key: index },
+          h('figcaption', null, 'Page ' + (index + 1) + ' of ' + pages.length),
+          h('img', { src, alt: 'PDF layout for page ' + (index + 1) })))));
+  }
+
+  function Download({ draft, source, getPdf }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const menu = React.useRef(null);
@@ -398,12 +463,12 @@ function start() {
       setError('');
       setBusy(true);
       try {
-        const blocks = Array.from(document.querySelectorAll('.preview .resume :is(h1,h2,h3,p,li)'))
+        const blocks = Array.from(source.current.querySelectorAll(':is(h1,h2,h3,p,li)'))
           .filter(block => block.textContent.trim());
-        const filename = name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '') || 'Resume';
+        const filename = draft.contact.name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '') || 'Resume';
         let blob;
         if (format === 'pdf') {
-          blob = await createResumePdf(blocks);
+          blob = await getPdf(draft);
         } else if (format === 'txt') {
           const text = blocks.map(block => {
             const prefix = block.tagName === 'LI' ? '- ' : block.tagName === 'H2' ? '\n' : '';
@@ -470,6 +535,19 @@ function start() {
 
   function App() {
     const [draft, setDraft] = useState(readDraft);
+    const exportSource = React.useRef(null);
+    const pdfCache = React.useRef(null);
+    const getPdf = React.useCallback(currentDraft => {
+      if (pdfCache.current?.draft === currentDraft) return pdfCache.current.promise;
+      const blocks = Array.from(exportSource.current.querySelectorAll(':is(h1,h2,h3,p,li)'))
+        .filter(block => block.textContent.trim());
+      const promise = createResumePdf(blocks).catch(error => {
+        if (pdfCache.current?.promise === promise) pdfCache.current = null;
+        throw error;
+      });
+      pdfCache.current = { draft: currentDraft, promise };
+      return promise;
+    }, []);
     const [saved, setSaved] = useState(true);
     const [preview, setPreview] = useState(false);
     const [resetOpen, setResetOpen] = useState(false);
@@ -515,7 +593,7 @@ function start() {
         h('div', { className: 'brand' }, h('span', { className: 'mark', 'aria-hidden': true }, 'R'), 'ResumeCraft'),
         h('div', { className: 'top-actions' },
           h('span', { className: 'save-status', role: 'status' }, saved ? 'Saved on this device' : 'Draft storage unavailable'),
-          h(Download, { name: draft.contact.name }))),
+          h(Download, { draft, source: exportSource, getPdf }))),
       h('main', { className: 'workspace' + (preview ? ' show-preview' : '') },
         h('div', { className: 'mobile-bar', role: 'group', 'aria-label': 'Workspace view' },
           h('button', { className: 'button', 'aria-pressed': !preview, onClick: () => setPreview(false) }, 'Edit'),
@@ -559,8 +637,10 @@ function start() {
           }),
           h('button', { className: 'remove reset', onClick: () => setResetOpen(true) }, 'Clear draft')),
         h('aside', { className: 'preview', 'aria-label': 'Live preview' },
-          h('div', { className: 'preview-header' }, h('h2', null, 'Live preview'), h('span', null, 'US Letter · Single column')),
-          h(Resume, { draft }))),
+          h(PdfPreview, { draft, getPdf }),
+          h('details', { className: 'preview-text' },
+            h('summary', null, 'Read resume text'),
+            h('div', { ref: exportSource }, h(Resume, { draft }))))),
       candidate && h(ImportDialog, { upload: candidate, onClose: () => setCandidate(null),
         onApply: converted => { setDraft(converted); setCandidate(null); } }),
       resetOpen && h(ResetDialog, {
