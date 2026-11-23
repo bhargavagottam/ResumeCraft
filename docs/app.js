@@ -350,16 +350,16 @@ function start() {
       const text = block.textContent;
       const anchor = block.querySelector('a[href]');
       const link = anchor && /^https?:\/\//i.test(anchor.href) ? anchor.href : undefined;
-      if (tag === 'LI') return { ul: [text], margin: [12, 0, 0, 3] };
+      if (tag === 'LI') return { ul: [text], margin: [8, 0, 0, 1] };
       if (tag === 'H2') return {
         stack: [
           { text, bold: true, fontSize: 12, margin: [0, 0, 0, 2] },
           { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 522, y2: 0, lineWidth: .5, lineColor: '#777777' }] },
         ],
-        margin: [0, 10, 0, 5],
+        margin: [0, 7, 0, 3],
         headlineLevel: 1,
       };
-      if (tag === 'H3') return { text, bold: true, margin: [0, 5, 0, 3], headlineLevel: 2 };
+      if (tag === 'H3') return { text, bold: true, margin: [0, 3, 0, 1], headlineLevel: 2 };
       if (tag === 'H1') return { text, alignment: 'center', fontSize: 23, bold: true, margin: [0, 0, 0, 4], headlineLevel: 1 };
       return {
         text, link, decoration: link ? 'underline' : undefined,
@@ -372,8 +372,8 @@ function start() {
     return new Promise((resolve, reject) => {
       const pdf = window.pdfMake.createPdf({
         pageSize: 'LETTER',
-        pageMargins: [45, 45, 45, 45],
-        defaultStyle: { font: 'Roboto', fontSize: 11, lineHeight: 1.12 },
+        pageMargins: [45, 40, 45, 40],
+        defaultStyle: { font: 'Roboto', fontSize: 11, lineHeight: 1.04 },
         content,
         pageBreakBefore: (node, following) => Boolean(node.headlineLevel && !following.length),
       });
@@ -398,7 +398,8 @@ function start() {
       setError('');
       setBusy(true);
       try {
-        const blocks = Array.from(document.querySelectorAll('.preview .resume :is(h1,h2,h3,p,li)'));
+        const blocks = Array.from(document.querySelectorAll('.preview .resume :is(h1,h2,h3,p,li)'))
+          .filter(block => block.textContent.trim());
         const filename = name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '') || 'Resume';
         let blob;
         if (format === 'pdf') {
@@ -413,18 +414,27 @@ function start() {
           const { Document, Paragraph, TextRun, Packer, HeadingLevel, AlignmentType } =
             await import('https://cdn.jsdelivr.net/npm/docx@9.5.1/+esm');
           const headings = { H1: HeadingLevel.TITLE, H2: HeadingLevel.HEADING_1, H3: HeadingLevel.HEADING_2 };
+          const sizes = { H1: 46, H2: 24, H3: 22 };
+          const spaceBefore = { H2: 140, H3: 60 };
           const children = blocks.map(block => new Paragraph({
             children: block.textContent.split('\n').map((part, index) => new TextRun({
               text: part, break: index ? 1 : 0, font: 'Arial',
+              size: sizes[block.tagName] || 22,
+              bold: Boolean(headings[block.tagName]) || block.classList.contains('resume-headline'),
+              color: '181818',
             })),
             heading: headings[block.tagName],
             bullet: block.tagName === 'LI' ? { level: 0 } : undefined,
             alignment: block.closest('.resume-header') ? AlignmentType.CENTER : undefined,
             keepNext: Boolean(headings[block.tagName]),
-            spacing: { after: 70 },
+            spacing: { before: spaceBefore[block.tagName] || 0, after: 45, line: 250 },
+            widowControl: true,
           }));
           blob = await Packer.toBlob(new Document({ sections: [{
-            properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
+            properties: { page: {
+              size: { width: 12240, height: 15840 },
+              margin: { top: 800, right: 900, bottom: 800, left: 900 },
+            } },
             children,
           }] }));
         }
